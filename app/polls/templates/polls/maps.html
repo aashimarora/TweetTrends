@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html>
+<title>Elastic TweetMap</title>
+    <head>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+    <link rel="stylesheet" type="text/css" href="https://fonts.googleapis.com/css?family=Roboto">
+    <!-- Latest compiled and minified CSS -->
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
+
+    <!-- Optional theme -->
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap-theme.min.css" integrity="sha384-rHyoN1iRsVXV4nD0JutlnGaslCJuC7uwjduW9SVrLvRYooPp2bWYgmgJQIXwl/Sp" crossorigin="anonymous">
+
+    <!-- Latest compiled and minified JavaScript -->
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa" crossorigin="anonymous"></script>
+    <!-- for testing with local version of cytoscape.js -->
+    <!-- <script src="../cytoscape.js/build/cytoscape.js"></script> -->
+
+    <style>
+      body {
+        font-family: Roboto;
+        font-size: 14px;
+        background-color: #34495e;
+        margin-top: 2%;
+        margin-bottom: 2%;
+      }
+      h1 {
+        opacity: 1;
+        color: #ecf0f1;
+        font-size: 2em;
+        text-align: center;
+        font-family: Roboto;
+      }
+      h3 {
+        opacity: 1;
+        color: #ecf0f1;
+        font-size: 1em;
+        text-align: center;
+        font-family: Roboto;
+      }
+
+      textarea{
+        width: 80%;
+        height: 50%;
+     }
+
+     .margin{
+        margin-top: 5%;
+        margin-left:30%;
+        margin-right: 30%;
+        text-align: center;
+
+     }
+    </style>
+
+
+
+        <style>
+#map {
+    height: 500px;
+    width: 100%;
+}
+        </style>
+    <h1>Elastic TweetMap</h1>
+    <h3>A scalable tweet geolocation plot using AWS Elastic Beanstalk, Elasticsearch and SQS</h3>
+    </head>
+    <body>
+        <div id="map"></div>
+        <script>
+        var map;
+        function initMap() {
+            var nyc = {lat: 40.7128, lng: -74.0059};
+            var iconBase = 'http://maps.gstatic.com/mapfiles/ridefinder-images/';
+            var icons = {
+                'positive': iconBase + 'mm_20_green.png',
+                'neutral': iconBase + 'mm_20_yellow.png',
+                'negative': iconBase + 'mm_20_red.png'};
+            map = new google.maps.Map(document.getElementById('map'), {
+                zoom: 10,
+                center: nyc
+            });
+
+            var tweets = {{plot|safe}};
+            if(tweets.length>0)
+            {
+               //alert(tweets.length + " results found with filter "+$('#select').val());
+               $('#count').html(tweets.length.toString() + ' Tweets');
+                for (i = 0; i < tweets.length; i++) 
+                {
+                    var item = tweets[i];
+                    var latlng = new google.maps.LatLng(item['lat'], item['lng']);
+                    var marker = new google.maps.Marker(
+                        {
+                            position: latlng,
+                            icon: icons[item['sentiment']],
+                            map: map
+                        });
+                }
+            }
+        }
+
+        (function worker() {
+          $.ajax({
+            url: 'ajax/getnewtweets', 
+            success: function(data) {
+                var filter = $('#select').val();
+                var c = 0;
+                for (id in data)
+                {
+                    if(filter == 'none' || data[id]['text'].indexOf(filter) !== -1)
+                    {
+                        c += 1;
+                        console.log(data[id]['text']);
+                        console.log(data[id]['sentiment']);
+                        var iconBase = 'http://maps.gstatic.com/mapfiles/ridefinder-images/';
+                        var icons = {
+                            'positive': iconBase + 'mm_20_green.png',
+                            'neutral': iconBase + 'mm_20_yellow.png',
+                            'negative': iconBase + 'mm_20_red.png'};
+                        var panel = {
+                            'positive': 'panel-success',
+                            'negative': 'panel-danger',
+                            'neutral': 'panel-warning'
+                        };
+                        var sentiment = data[id]['sentiment']
+                        $("#newtweets").append('<li><div class="panel '+panel[sentiment]+'"><div class="panel-heading">@'+data[id]['handle']+'</div><div class="panel-body">'+data[id]['text']+'</div></div></li>');
+                        var item = data[id]['coordinates']
+                        var latlng = new google.maps.LatLng(item['coordinates'][1], item['coordinates'][0]);
+                        var marker = new google.maps.Marker({position: latlng, icon:icons[sentiment], map:map});
+                    }
+                    else
+                        console.log('No match for filter')
+                }
+                if(c>0)
+                {
+                    var res = parseInt($('#count').text().split(" ")[0]);
+                    res = res + c;
+                    $('#count').html(res.toString() + ' Tweets');
+                }
+
+              
+            },
+            complete: function() {
+              // Schedule the next request when the current one's complete
+              setTimeout(worker, 2000);
+            }
+          });
+        })();
+
+
+        window.onbeforeunload = function() {
+            localStorage.setItem('filter', $('#select').val());
+            console.log('Stored filter '+ $('#select').val());
+        }
+
+
+        window.onload = function() {
+
+            var filter = localStorage.filter;
+            console.log('Loaded filter '+ filter);
+            if (filter !== null) $('#select').val(filter);
+        }
+        </script>
+
+        <div>
+            <form name="form" action="/polls/map" method='POST' class="margin">
+                <select id = 'select' name="select" class="form-control">
+                    <option value="none">No Filter</option>
+                    <option value="programming">Programming</option>
+                    <option value="love">Love</option>
+                    <option value="trump">Trump</option>
+                    <option value="clinton">Clinton</option>
+                    <option value="technology">Technology</option>
+                    <option value="movies">Movies</option>                
+                    <option value="football">Football</option>                
+                    <option value="india">India</option>                
+                    <option value="elections">Elections</option>                
+                    <option value="travel">Travel</option>              
+                </select>
+                <br>
+                <button id="count" name="count" type="button" class="btn btn-success btn-lg"> 0 Tweets </button>
+                <button type="submit" class="btn btn-default btn-lg">Apply Filter</button>
+                {% csrf_token %}
+            </form>
+
+            <h1>Live Tweets</h1>
+            <ul id="newtweets" class="list-unstyled" style="margin-left: 20%; margin-right: 20%; margin-top: 2%">
+            </ul>
+        </div>
+
+        <script async defer
+                        src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAB8-ny5X3TRAkXsjgO7idxXFuRrLx4g1I&callback=initMap"></script>
+        </script>
+    </body>
+</html>
+
