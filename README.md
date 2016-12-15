@@ -1,6 +1,6 @@
 # TweetTrends
 
-Displays Tweets in real time on Google Maps with Sentiment markers using the following
+Django application that displays Tweets in real time on Google Maps with Sentiment markers using the following
 
 1. Tweepy in Python
 2. AWS ElasticSearch and querying using Sense plugin
